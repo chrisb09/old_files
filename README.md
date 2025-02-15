@@ -1,6 +1,6 @@
 # File and Folder Scoring Script
 
-This script lists files and folders in a specified directory, calculates a score based on their size and last modified time, and optionally deletes them based on user input.
+This script lists files and folders in a specified directory, calculates a score based on their size and last modified time, and optionally deletes them based on user input. Note that the script ignores files that are linked (soft or hardlink).
 
 ## Usage
 
@@ -24,7 +24,6 @@ python3 main.py /path/to/folder --min_score 10 --min_age 30 --exclude ".*\.log" 
 ```
 
 This command will list files and folders in `/path/to/folder` with a minimum score of 10, minimum age of 30 days, excluding files with `.log` extension, in reverse order, and prompt for deletion.
-
 
 ## License
 
