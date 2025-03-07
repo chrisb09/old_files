@@ -26,7 +26,10 @@ def format_score(score):
         score /= 10
     return f"{score:.2f}e"+f"{magnitude * 1}".zfill(2)
 
-def list_files_and_folders(path, min_score=0, reverse=False, delete=False, exclude=None, min_age=0):
+def calculate_score(size, timestamp):
+    return size * (time.time() - timestamp)
+
+def list_files_and_folders(path, min_score=0, reverse=False, delete=False, exclude=None, min_age=0, ignore_age_score=False):
     entries = []
     total_size = 0
     last_modified = 0
@@ -36,31 +39,33 @@ def list_files_and_folders(path, min_score=0, reverse=False, delete=False, exclu
 
     for item in items:
         item_path = os.path.join(path, item)
-        if os.path.isfile(item_path) and not os.path.islink(item_path) and os.stat(file_path).st_nlink <= 1:
-            # If it's a file, add its details to the entries list
-            file_size = os.path.getsize(item_path)
-            file_modified = os.path.getmtime(item_path)
-            entries.append((item, file_size, file_modified, file_size))
-            #total_size += file_size
-            last_modified = max(last_modified, file_modified)
-        elif os.path.isdir(item_path) and not os.path.islink(item_path):
+        if os.path.exists(item_path) and not os.path.islink(item_path):
+            if os.path.isfile(item_path):
+                if os.stat(item_path).st_nlink <= 1:
+                    # If it's a file, add its details to the entries list
+                    file_size = os.path.getsize(item_path)
+                    file_modified = os.path.getmtime(item_path)
+                    entries.append((item, file_size, file_modified, file_size))
+                    #total_size += file_size
+                    last_modified = max(last_modified, file_modified)
+            elif os.path.isdir(item_path):
             # If it's a directory, iterate over its files
-            folder_size = 0
-            folder_modified = 0
-            for root, dirs, filenames in os.walk(item_path):
-                for filename in filenames:
-                    file_path = os.path.join(root, filename)
-                    if not os.path.islink(file_path) and os.stat(file_path).st_nlink <= 1:
-                        file_size = os.path.getsize(file_path)
-                        file_modified = os.path.getmtime(file_path)
-                        folder_size += file_size
-                        folder_modified = max(folder_modified, file_modified)
-            entries.append((item, folder_size, folder_modified, folder_size))
-            #total_size += folder_size
-            last_modified = max(last_modified, folder_modified)
+                folder_size = 0
+                folder_modified = 0
+                for root, dirs, filenames in os.walk(item_path):
+                    for filename in filenames:
+                        file_path = os.path.join(root, filename)
+                        if os.path.exists(file_path) and not os.path.islink(file_path) and os.stat(file_path).st_nlink <= 1:
+                            file_size = os.path.getsize(file_path)
+                            file_modified = os.path.getmtime(file_path)
+                            folder_size += file_size
+                            folder_modified = max(folder_modified, file_modified)
+                entries.append((item, folder_size, folder_modified, folder_size))
+                #total_size += folder_size
+                last_modified = max(last_modified, folder_modified)
 
     # Filter entries by min_score
-    entries = [entry for entry in entries if (time.time() - entry[2]) * entry[1] >= min_score and (time.time() - entry[2]) / (60*60*24) >= min_age]
+    entries = [entry for entry in entries if (calculate_score(entry[1], entry[2]) if not ignore_age_score else entry[1]) >= min_score and (time.time() - entry[2]) / (60*60*24) >= min_age]
     newentries = []
     if exclude is not None:
         for entry in entries:
@@ -71,12 +76,12 @@ def list_files_and_folders(path, min_score=0, reverse=False, delete=False, exclu
     total_size = sum([entry[3] for entry in entries])
 
     # Sort entries by score
-    entries.sort(key=lambda x: (time.time() - x[2]) * x[1], reverse=reverse)
+    entries.sort(key=lambda x: calculate_score(x[1], x[2]) if not ignore_age_score else x[1], reverse=reverse) #(time.time() - x[2]) * x[1]
 
     # Print entries
     print("Score      Date                   Size     Name")
     for entry in entries:
-        score = (time.time() - entry[2]) * entry[1]
+        score = calculate_score(entry[1], entry[2]) if not ignore_age_score else entry[1]
         print(f"{format_score(score)}  {time.strftime('%d.%m.%Y %H:%M', time.localtime(entry[2]))}  {format_size(entry[1])} \t{entry[0]}")
 
     print("\nTotal Size:", format_size(total_size))
@@ -103,10 +108,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="List files and folders with scores.")
     parser.add_argument("path", help="The path to the folder")
     parser.add_argument("--min_score", type=float, default=1, help="Minimum score to filter entries")
+    parser.add_argument("--ignore-age-score", action="store_true", help="Ignore age score")
     parser.add_argument("--min_age", type=int, default=0, help="Minimum age in days to filter entries")
     parser.add_argument("--exclude", type=str, default=None, help="Regex of files to ignore")
     parser.add_argument("--reverse", action="store_true", help="Reverse sorting order")
     parser.add_argument("--delete", action="store_true", help="Enable delete option")
     args = parser.parse_args()
 
-    list_files_and_folders(args.path, min_score=args.min_score, reverse=args.reverse, delete=args.delete, exclude=args.exclude, min_age=args.min_age)
+    list_files_and_folders(args.path, min_score=args.min_score, reverse=args.reverse, delete=args.delete, exclude=args.exclude, min_age=args.min_age, ignore_age_score=args.ignore_age_score)
